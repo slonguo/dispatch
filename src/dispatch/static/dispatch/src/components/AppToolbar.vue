@@ -178,7 +178,7 @@ export default {
     },
     toggleDarkTheme() {
       this.$vuetify.theme.dark = !this.$vuetify.theme.dark
-      localStorage.setItem("dark_theme", this.$vuetify.theme.dark.toString());
+      localStorage.setItem("dark_theme", this.$vuetify.theme.dark.toString())
     },
     switchOrganizations(slug) {
       this.$router.push({ params: { organization: slug } })
@@ -200,12 +200,12 @@ export default {
       descending: [false],
     }
 
-    let theme = localStorage.getItem("dark_theme");
+    let theme = localStorage.getItem("dark_theme")
     if (theme) {
       if (theme === "true") {
-          this.$vuetify.theme.dark = true;
+        this.$vuetify.theme.dark = true
       } else {
-          this.$vuetify.theme.dark = false;
+        this.$vuetify.theme.dark = false
       }
     }
 
