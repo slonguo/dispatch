@@ -34,10 +34,10 @@ class Participant(Base):
     service_id = Column(Integer, ForeignKey("service.id", ondelete="CASCADE"))
     service = relationship("Service", backref="participant")
     incident_id = Column(Integer, ForeignKey("incident.id", ondelete="CASCADE", use_alter=True))
-    individual = relationship("IndividualContact", lazy="subquery", backref="participant")
+    individual = relationship("IndividualContact", lazy="joined", backref="participant")
     individual_contact_id = Column(Integer, ForeignKey("individual_contact.id"))
     participant_roles = relationship(
-        "ParticipantRole", backref="participant", lazy="subquery", cascade="all, delete-orphan"
+        "ParticipantRole", backref="participant", lazy="joined", cascade="all, delete-orphan"
     )
     reports = relationship("Report", backref="participant")
     created_tasks = relationship(
