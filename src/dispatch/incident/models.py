@@ -3,7 +3,6 @@ from collections import Counter, defaultdict
 from typing import List, Optional
 
 from pydantic import validator
-from sqlalchemy.orm.relationships import foreign
 from sqlalchemy.sql.sqltypes import Float
 from dispatch.models import NameStr, PrimaryKey
 from sqlalchemy import (
@@ -14,13 +13,11 @@ from sqlalchemy import (
     PrimaryKeyConstraint,
     String,
     Table,
-    select,
 )
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import relationship
 from sqlalchemy_utils import TSVectorType, observes
 
-from dispatch.enums import DocumentResourceTypes
 from dispatch.conference.models import ConferenceRead
 from dispatch.conversation.models import ConversationRead
 from dispatch.database.core import Base
@@ -35,8 +32,7 @@ from dispatch.incident_priority.models import (
 )
 from dispatch.incident_type.models import IncidentTypeCreate, IncidentTypeRead, IncidentTypeBase
 from dispatch.models import DispatchBase, ProjectMixin, TimeStampMixin
-from dispatch.participant.models import Participant, ParticipantRead, ParticipantUpdate
-from dispatch.participant_role.models import ParticipantRole, ParticipantRoleType
+from dispatch.participant.models import ParticipantRead, ParticipantUpdate
 from dispatch.report.enums import ReportTypes
 from dispatch.report.models import ReportRead
 from dispatch.storage.models import StorageRead
@@ -72,11 +68,15 @@ class Incident(Base, TimeStampMixin, ProjectMixin):
     description = Column(String, nullable=False)
     status = Column(String, default=IncidentStatus.active)
     visibility = Column(String, default=Visibility.open, nullable=False)
+    total_cost = Column(Float)
 
     # auto generated
     reported_at = Column(DateTime, default=datetime.utcnow)
     stable_at = Column(DateTime)
     closed_at = Column(DateTime)
+
+    primary_team = Column(String)
+    primary_location = Column(String)
 
     search_vector = Column(
         TSVectorType(
@@ -108,58 +108,9 @@ class Incident(Base, TimeStampMixin, ProjectMixin):
     incident_review_document_id = Column(Integer, ForeignKey("document.id"))
     incident_review_document = relationship("Document", foreign_keys=[incident_review_document_id])
 
-    primary_team = Column(String)
-    primary_location = Column(String)
-
-    @observes("participants")
-    def participant_observer(self, participants):
-        self.primary_team = Counter(p.team for p in participants).most_common(1)[0][0]
-        self.primary_location = Column(p.location for p in participants).most_common(1)[0][0]
-
-    @hybrid_property
-    def tactical_reports(self):
-        if self.reports:
-            tactical_reports = [
-                report for report in self.reports if report.type == ReportTypes.tactical_report
-            ]
-            return tactical_reports
-
-    @hybrid_property
-    def last_tactical_report(self):
-        if self.tactical_reports:
-            return sorted(self.tactical_reports, key=lambda r: r.created_at)[-1]
-
-    @hybrid_property
-    def executive_reports(self):
-        if self.reports:
-            executive_reports = [
-                report for report in self.reports if report.type == ReportTypes.executive_report
-            ]
-            return executive_reports
-
-    @hybrid_property
-    def last_executive_report(self):
-        if self.executive_reports:
-            return sorted(self.executive_reports, key=lambda r: r.created_at)[-1]
-
-    incident_costs = relationship(
-        "IncidentCost",
-        backref="incident",
-        cascade="all, delete-orphan",
-        order_by="IncidentCost.created_at",
-    )
-
-    total_cost = Column(Float)
-
-    @observes("incident_costs")
-    def cost_observer(self, incident_costs):
-        if incident_costs:
-            self.total_cost = 0
-            for cost in incident_costs:
-                self.total_cost += cost.amount
-
     incident_priority = relationship("IncidentPriority", lazy="joined", backref="incident")
     incident_priority_id = Column(Integer, ForeignKey("incident_priority.id"))
+
     incident_type = relationship("IncidentType", lazy="joined", backref="incident")
     incident_type_id = Column(Integer, ForeignKey("incident_type.id"))
 
@@ -197,6 +148,51 @@ class Incident(Base, TimeStampMixin, ProjectMixin):
     # allow incidents to be marked as duplicate
     duplicate_id = Column(Integer, ForeignKey("incident.id"))
     duplicates = relationship("Incident", remote_side=[id], uselist=True)
+
+    incident_costs = relationship(
+        "IncidentCost",
+        backref="incident",
+        cascade="all, delete-orphan",
+        order_by="IncidentCost.created_at",
+    )
+
+    @hybrid_property
+    def tactical_reports(self):
+        if self.reports:
+            tactical_reports = [
+                report for report in self.reports if report.type == ReportTypes.tactical_report
+            ]
+            return tactical_reports
+
+    @hybrid_property
+    def last_tactical_report(self):
+        if self.tactical_reports:
+            return sorted(self.tactical_reports, key=lambda r: r.created_at)[-1]
+
+    @hybrid_property
+    def executive_reports(self):
+        if self.reports:
+            executive_reports = [
+                report for report in self.reports if report.type == ReportTypes.executive_report
+            ]
+            return executive_reports
+
+    @hybrid_property
+    def last_executive_report(self):
+        if self.executive_reports:
+            return sorted(self.executive_reports, key=lambda r: r.created_at)[-1]
+
+    @observes("incident_costs")
+    def cost_observer(self, incident_costs):
+        if incident_costs:
+            self.total_cost = 0
+            for cost in incident_costs:
+                self.total_cost += cost.amount
+
+    @observes("participants")
+    def participant_observer(self, participants):
+        self.primary_team = Counter(p.team for p in participants).most_common(1)[0][0]
+        self.primary_location = Column(p.location for p in participants).most_common(1)[0][0]
 
 
 class ProjectRead(DispatchBase):
